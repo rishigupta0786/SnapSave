@@ -27,11 +27,11 @@ export async function POST(request) {
 
     const filename = sanitizeFilename(media.title);
     const extension = format.extension;
-    let finalPath = path.join(downloadsDir, `${filename}.${extension}`);
+    let finalPath = `${downloadsDir}${path.sep}${filename}.${extension}`;
 
     let counter = 1;
     while (fs.existsSync(finalPath)) {
-      finalPath = path.join(downloadsDir, `${filename} (${counter}).${extension}`);
+      finalPath = `${downloadsDir}${path.sep}${filename} (${counter}).${extension}`;
       counter++;
     }
 
