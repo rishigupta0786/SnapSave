@@ -54,7 +54,10 @@ export async function POST(request) {
           } else {
             await downloadFile(url, finalPath, onProgress);
           }
-          sendEvent("success", { path: finalPath });
+          sendEvent("success", { 
+            filename: `${filename}.${extension}`,
+            serveUrl: `/api/serve?file=${encodeURIComponent(path.basename(finalPath))}`
+          });
           controller.close();
         } catch (error) {
           sendEvent("error", { message: error.message || "Unable to download media" });

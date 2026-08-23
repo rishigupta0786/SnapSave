@@ -60,8 +60,16 @@ export default function Home() {
               setDownloadProgress(data);
               setDownloadMessage("Downloading...");
             } else if (currentEvent === 'success') {
-              setDownloadMessage(`Success! Saved to ${data.path}`);
+              setDownloadMessage("Download complete! Saving file...");
               setDownloadProgress(null);
+              // Trigger browser's native Save As dialog
+              const a = document.createElement("a");
+              a.href = data.serveUrl;
+              a.download = data.filename;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              setDownloadMessage("File saved successfully!");
             } else if (currentEvent === 'error') {
               throw new Error(data.message);
             }
