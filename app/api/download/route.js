@@ -1,0 +1,80 @@
+import { NextResponse } from "next/server";
+import path from "node:path";
+import fs from "node:fs";
+import { resolveMedia } from "@/lib/platforms/resolver";
+import { getDownloadsDirectory } from "@/lib/utils/path";
+import { sanitizeFilename } from "@/lib/utils/filename";
+import { downloadFile } from "@/lib/downloader/http";
+import { downloadYoutubeMedia } from "@/lib/platforms/youtube";
+import { activeInstagramProvider } from "@/lib/platforms/instagram";
+
+export async function POST(request) {
+  try {
+    const body = await request.json();
+    const { url, formatId } = body;
+
+    if (!url) {
+      return NextResponse.json({ error: "URL is required" }, { status: 400 });
+    }
+
+    const media = await resolveMedia(url);
+    const format = media.formats.find(f => f.id === formatId) || media.formats[0];
+
+    const downloadsDir = getDownloadsDirectory();
+    if (!fs.existsSync(downloadsDir)) {
+      fs.mkdirSync(downloadsDir, { recursive: true });
+    }
+
+    const filename = sanitizeFilename(media.title);
+    const extension = format.extension;
+    let finalPath = path.join(downloadsDir, `${filename}.${extension}`);
+
+    let counter = 1;
+    while (fs.existsSync(finalPath)) {
+      finalPath = path.join(downloadsDir, `${filename} (${counter}).${extension}`);
+      counter++;
+    }
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const sendEvent = (event, data) => {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        };
+
+        const onProgress = (progress) => {
+          sendEvent("progress", progress);
+        };
+
+        try {
+          if (media.platform === "youtube") {
+            await downloadYoutubeMedia(url, formatId, finalPath, onProgress);
+          } else if (media.platform === "instagram") {
+            await activeInstagramProvider.download(url, formatId, finalPath, onProgress);
+          } else {
+            await downloadFile(url, finalPath, onProgress);
+          }
+          sendEvent("success", { path: finalPath });
+          controller.close();
+        } catch (error) {
+          sendEvent("error", { message: error.message || "Unable to download media" });
+          controller.close();
+        }
+      }
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
+    });
+
+  } catch (error) {
+    return NextResponse.json(
+      { error: error.message || "Unable to process request" },
+      { status: 500 }
+    );
+  }
+}
