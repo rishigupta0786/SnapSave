@@ -30,6 +30,10 @@ export async function GET(request) {
       ".webm": "video/webm",
       ".mkv": "video/x-matroska",
       ".mp3": "audio/mpeg",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".png": "image/png",
+      ".webp": "image/webp",
     };
 
     const contentType = mimeTypes[ext] || "application/octet-stream";
