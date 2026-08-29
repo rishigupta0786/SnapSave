@@ -13,6 +13,62 @@ export default function Home() {
 
   const [downloadProgress, setDownloadProgress] = useState(null);
 
+  // Downloads a single format and triggers the browser's native download for it.
+  const downloadOneFormat = async (formatId) => {
+    const response = await fetch("/api/download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: media.url,
+        formatId
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Failed to start download (${response.status})`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep last incomplete line
+
+      let currentEvent = null;
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          currentEvent = line.substring(7).trim();
+        } else if (line.startsWith('data: ')) {
+          const dataStr = line.substring(6).trim();
+          if (!dataStr) continue;
+
+          const data = JSON.parse(dataStr);
+          if (currentEvent === 'progress') {
+            setDownloadProgress(data);
+          } else if (currentEvent === 'success') {
+            setDownloadProgress(null);
+            // Trigger the browser's native download for this file
+            const a = document.createElement("a");
+            a.href = data.serveUrl;
+            a.download = data.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          } else if (currentEvent === 'error') {
+            throw new Error(data.message);
+          }
+        }
+      }
+    }
+  };
+
   const handleDownload = async () => {
     if (!media || !selectedFormat) return;
 
@@ -20,62 +76,29 @@ export default function Home() {
       setDownloading(true);
       setDownloadMessage("Starting download...");
       setDownloadProgress(null);
+      await downloadOneFormat(selectedFormat);
+      setDownloadMessage("File saved successfully!");
+    } catch (error) {
+      setDownloadMessage(`Error: ${error.message}`);
+      setDownloadProgress(null);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
-      const response = await fetch("/api/download", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: media.url,
-          formatId: selectedFormat
-        })
-      });
+  const handleDownloadAllImages = async () => {
+    if (!media) return;
+    const images = media.formats.filter((f) => !f.hasVideo);
+    if (images.length === 0) return;
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to start download (${response.status})`);
+    try {
+      setDownloading(true);
+      setDownloadProgress(null);
+      for (let i = 0; i < images.length; i++) {
+        setDownloadMessage(`Downloading image ${i + 1} of ${images.length}...`);
+        await downloadOneFormat(images[i].id);
       }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop(); // keep last incomplete line
-
-        let currentEvent = null;
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            currentEvent = line.substring(7).trim();
-          } else if (line.startsWith('data: ')) {
-            const dataStr = line.substring(6).trim();
-            if (!dataStr) continue;
-            
-            const data = JSON.parse(dataStr);
-            if (currentEvent === 'progress') {
-              setDownloadProgress(data);
-              setDownloadMessage("Downloading...");
-            } else if (currentEvent === 'success') {
-              setDownloadMessage("Download complete! Saving file...");
-              setDownloadProgress(null);
-              // Trigger browser's native Save As dialog
-              const a = document.createElement("a");
-              a.href = data.serveUrl;
-              a.download = data.filename;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              setDownloadMessage("File saved successfully!");
-            } else if (currentEvent === 'error') {
-              throw new Error(data.message);
-            }
-          }
-        }
-      }
+      setDownloadMessage(`All ${images.length} images saved successfully!`);
     } catch (error) {
       setDownloadMessage(`Error: ${error.message}`);
       setDownloadProgress(null);
@@ -120,7 +143,7 @@ export default function Home() {
               />
             )}
 
-            <div className="pt-4 border-t">
+            <div className="pt-4 border-t space-y-3">
               <button
                 onClick={handleDownload}
                 disabled={downloading}
@@ -128,6 +151,19 @@ export default function Home() {
               >
                 {downloading ? "Downloading..." : "Download Media"}
               </button>
+
+              {media.platform === "instagram" &&
+                media.formats.filter((f) => !f.hasVideo).length > 1 && (
+                  <button
+                    onClick={handleDownloadAllImages}
+                    disabled={downloading}
+                    className="w-full rounded-xl bg-gray-900 px-6 py-3 text-white font-semibold shadow hover:shadow-lg active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {downloading
+                      ? "Downloading..."
+                      : `Download All ${media.formats.filter((f) => !f.hasVideo).length} Images`}
+                  </button>
+                )}
 
               {downloadProgress && (
                 <div className="mt-4 fade-in animate-in duration-300">
