@@ -54,13 +54,13 @@ export default function Home() {
             setDownloadProgress(data);
           } else if (currentEvent === 'success') {
             setDownloadProgress(null);
-            // Trigger the browser's native download for this file
-            const a = document.createElement("a");
-            a.href = data.serveUrl;
-            a.download = data.filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            // Navigate to the file instead of simulating an <a> click: mobile
+            // browsers tie the click's download permission to a user-gesture
+            // token that has usually expired by the time a multi-second
+            // extraction finishes, silently failing the download. A direct
+            // navigation isn't subject to that expiry, and the server's
+            // Content-Disposition: attachment header keeps us on this page.
+            window.location.href = data.serveUrl;
           } else if (currentEvent === 'error') {
             throw new Error(data.message);
           }
