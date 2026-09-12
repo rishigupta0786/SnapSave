@@ -27,16 +27,13 @@ export async function POST(request) {
 
     const baseFilename = sanitizeFilename(media.title);
 
-    // Instagram posts with multiple images are downloaded one request per image
-    // (each served and deleted before the next starts), so the file-existence
-    // check below never sees siblings to disambiguate against. Number them
-    // explicitly instead, using the index baked into the image's own format id.
+    // Always append the image number for Instagram images directly to the base filename
+    // to match the user's requested 'xyz1, xyz2' format and prevent any naming conflicts.
     const imageNumber = media.platform === "instagram" && typeof format.id === "string"
       ? format.id.match(/^ig_image_(\d+)$/)?.[1]
       : null;
-    const isMultiImagePost = imageNumber && media.formats.filter(f => !f.hasVideo).length > 1;
 
-    const filename = isMultiImagePost ? `${baseFilename} ${imageNumber}` : baseFilename;
+    const filename = imageNumber ? `${baseFilename}${imageNumber}` : baseFilename;
     const extension = format.extension;
     let finalPath = `${downloadsDir}${path.sep}${filename}.${extension}`;
 

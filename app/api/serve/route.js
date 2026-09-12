@@ -44,7 +44,7 @@ export async function GET(request) {
     return new Response(fileBuffer, {
       headers: {
         "Content-Type": contentType,
-        "Content-Disposition": `attachment; filename="${sanitized}"`,
+        "Content-Disposition": `attachment; filename="${sanitized.replace(/[^\x20-\x7E]/g, '')}"; filename*=UTF-8''${encodeURIComponent(sanitized)}`,
         "Content-Length": fileBuffer.length.toString(),
       },
     });
